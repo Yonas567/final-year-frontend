@@ -29,6 +29,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=6011
 ENV HOSTNAME=0.0.0.0
+# Runtime API target (no rebuild when changing). Override in your deploy panel.
+ENV API_URL=https://apiearthquake.yonasproject.cloud
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs

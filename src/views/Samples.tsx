@@ -205,7 +205,7 @@ export default function SamplesPage() {
             <>
               <div>{error instanceof Error ? error.message : "Failed to load samples"}</div>
               <div style={{ marginTop: 8, fontSize: 11, color: "var(--text3)" }}>
-                Backend must expose GET /api/samples on {getApiOrigin()}. Redeploy the API if this route was added recently.
+                Proxy target: server env <code style={{ fontFamily: "var(--font-mono)", color: "var(--teal)" }}>API_URL</code> (runtime) or rebuild with <code style={{ fontFamily: "var(--font-mono)", color: "var(--teal)" }}>NEXT_PUBLIC_API_URL</code>. Expected backend: {getApiOrigin()}/api/samples
               </div>
             </>
           </div>

@@ -1,7 +1,9 @@
 /** Backend origin without trailing slash or `/api` suffix. */
 export function getApiOrigin(): string {
   const raw = (
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:5000"
   ).replace(/\/$/, "");
   return raw.endsWith("/api") ? raw.slice(0, -4) : raw;
 }
