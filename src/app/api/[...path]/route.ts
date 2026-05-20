@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-/** Server-only — set at container runtime (no rebuild needed). */
-function getBackendOrigin(): string {
-  const raw =
-    process.env.API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:6010";
-  return raw.replace(/\/$/, "").replace(/\/api$/, "");
-}
+import {
+  getBackendOrigin,
+  upstreamConfigHint,
+} from "@/lib/api/server";
 
 async function proxy(
   req: NextRequest,
@@ -37,7 +32,7 @@ async function proxy(
     return NextResponse.json(
       {
         ok: false,
-        error: `Cannot reach API at ${getBackendOrigin()}: ${message}`,
+        error: `Cannot reach API at ${getBackendOrigin()}: ${message}. ${upstreamConfigHint()}`,
         code: "UPSTREAM_UNREACHABLE",
       },
       { status: 502 },
