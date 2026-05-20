@@ -16,6 +16,8 @@ export interface SeismoContextValue {
   alertLevel: AlertLevel;
   events: SeismicEvent[];
   wsStatus: WsStatus;
+  lastAlert: SeismicEvent | null;
+  clearAlert: () => void;
   prediction: PredictionRecord;
   loading: boolean;
   runPrediction: () => Promise<void>;

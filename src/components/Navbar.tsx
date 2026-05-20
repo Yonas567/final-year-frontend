@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Database, BarChart2, Bell, Map, Cpu, Table2 } from "lucide-react";
+import {
+  Activity,
+  BarChart2,
+  Bell,
+  Cpu,
+  Database,
+  FileSpreadsheet,
+  List,
+  Map,
+  Table2,
+} from "lucide-react";
 import { useClock } from "@/hooks/useSeismo";
 import type { AlertLevel } from "@/types/seismo";
 import type { WsStatus } from "@/types/seismo";
@@ -11,8 +21,10 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", Icon: Activity, href: "/dashboard" },
   { id: "map", label: "Seismic Map", Icon: Map, href: "/map" },
   { id: "data", label: "Data Center", Icon: Database, href: "/data" },
-  { id: "samples", label: "Samples", Icon: Table2, href: "/samples" },
-  { id: "prediction", label: "Prediction", Icon: BarChart2, href: "/prediction" },
+  { id: "samples", label: "Sensor Data", Icon: Table2, href: "/samples" },
+  { id: "import", label: "Import", Icon: FileSpreadsheet, href: "/import" },
+  { id: "prediction", label: "Predictions", Icon: BarChart2, href: "/prediction" },
+  { id: "events", label: "Events", Icon: List, href: "/events" },
   { id: "alerts", label: "Alerts", Icon: Bell, href: "/alerts" },
 ];
 

@@ -64,8 +64,10 @@ export function useSensorData() {
   const [alertLevel, setAlertLevel] = useState<AlertLevel>("none");
   const [liveEvents, setLiveEvents] = useState<SeismicEvent[]>([]);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
+  const [lastAlert, setLastAlert] = useState<SeismicEvent | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const clearAlert = useCallback(() => setLastAlert(null), []);
 
   const events = useMemo(() => {
     const seen = new Set<string | number>();
@@ -123,6 +125,7 @@ export function useSensorData() {
           if (msg.type === "alert") {
             const event = alertToEvent(msg.data);
             setLiveEvents((prev) => [event, ...prev].slice(0, 50));
+            setLastAlert(event);
             queryClient.setQueryData(
               queryKeys.events.recent(RECENT_EVENTS_N),
               (old: SeismicEvent[] | undefined) => {
@@ -132,6 +135,9 @@ export function useSensorData() {
                 return [event, ...prev].slice(0, RECENT_EVENTS_N);
               },
             );
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.events.recent(RECENT_EVENTS_N),
+            });
           }
         } catch {
           /* ignore malformed frames */
@@ -153,6 +159,8 @@ export function useSensorData() {
     events,
     wsStatus,
     eventsLoading,
+    lastAlert,
+    clearAlert,
   };
 }
 

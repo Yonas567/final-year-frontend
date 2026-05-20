@@ -2,11 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import AlertToast from "@/components/AlertToast";
 import { SeismoProvider, useSeismo } from "@/context/SeismoContext";
 
 function MainInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { alertLevel, wsStatus } = useSeismo();
+  const { alertLevel, wsStatus, lastAlert, clearAlert } = useSeismo();
 
   return (
     <div
@@ -18,6 +19,9 @@ function MainInner({ children }: { children: React.ReactNode }) {
       }}
     >
       <Navbar alertLevel={alertLevel} wsStatus={wsStatus} />
+      {lastAlert && (
+        <AlertToast event={lastAlert} onDismiss={clearAlert} />
+      )}
       <main
         style={{ flex: 1, overflowY: "auto" }}
         className="fade-in"

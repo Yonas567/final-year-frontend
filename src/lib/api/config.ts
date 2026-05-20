@@ -3,7 +3,7 @@ export function getApiOrigin(): string {
   const raw = (
     process.env.API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5000"
+    "http://localhost:6010"
   ).replace(/\/$/, "");
   return raw.endsWith("/api") ? raw.slice(0, -4) : raw;
 }
@@ -33,7 +33,8 @@ export function getWebSocketUrl(): string {
     const origin = getApiOrigin();
     const url = new URL(origin);
     if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
-      return `ws://${url.hostname}:6010/ws`;
+      const port = url.port || "6010";
+      return `ws://${url.hostname}:${port}/ws`;
     }
     const wsProto = url.protocol === "https:" ? "wss:" : "ws:";
     return `${wsProto}//${url.host}/ws`;

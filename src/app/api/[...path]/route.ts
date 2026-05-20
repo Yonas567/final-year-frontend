@@ -5,7 +5,7 @@ function getBackendOrigin(): string {
   const raw =
     process.env.API_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5000";
+    "http://localhost:6010";
   return raw.replace(/\/$/, "").replace(/\/api$/, "");
 }
 

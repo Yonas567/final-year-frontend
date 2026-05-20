@@ -1,12 +1,12 @@
 "use client";
 
-import PredictionPage from "@/views/Prediction";
+import PredictionsPage from "@/views/Predictions";
 import { useSeismo } from "@/context/SeismoContext";
 
 export default function Page() {
   const { prediction, loading, runPrediction, history } = useSeismo();
   return (
-    <PredictionPage
+    <PredictionsPage
       prediction={prediction}
       loading={loading}
       runPrediction={runPrediction}

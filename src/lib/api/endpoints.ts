@@ -1,7 +1,8 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchFormData } from "./client";
 import type {
   IngestBatchRequest,
   IngestBatchResponse,
+  IngestExcelResponse,
   IngestRequest,
   IngestResponse,
   PredictHistoryResponse,
@@ -39,6 +40,13 @@ export function postIngest(body: IngestRequest) {
 export function fetchSamples(page = 1) {
   const p = Math.max(1, Math.floor(page));
   return apiFetch<SamplesResponse>(`/samples?page=${p}`);
+}
+
+export function postIngestExcel(file: File, deviceId?: string) {
+  const form = new FormData();
+  form.append("file", file);
+  if (deviceId) form.append("deviceId", deviceId);
+  return apiFetchFormData<IngestExcelResponse>("/ingest/excel", form);
 }
 
 export function postIngestBatch(body: IngestBatchRequest) {

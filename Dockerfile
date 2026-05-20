@@ -13,7 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # NEXT_PUBLIC_* is inlined at build time — override when building for production.
-ARG NEXT_PUBLIC_API_URL=http://localhost:5000
+ARG NEXT_PUBLIC_API_URL=http://localhost:6010
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -30,7 +30,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=6011
 ENV HOSTNAME=0.0.0.0
 # Runtime API target (no rebuild when changing). Override in your deploy panel.
-ENV API_URL=https://apiearthquake.yonasproject.cloud
+ENV API_URL=http://localhost:6010
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs

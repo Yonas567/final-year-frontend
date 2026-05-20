@@ -71,7 +71,7 @@ export default function SamplesPage() {
                 margin: 0,
               }}
             >
-              Sensor Samples
+              Sensor Data
             </h1>
           </div>
           <p

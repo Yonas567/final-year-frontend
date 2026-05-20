@@ -8,7 +8,10 @@ import {
 import { Wifi, Cpu, Zap } from 'lucide-react';
 import WaveformCanvas from '@/components/WaveformCanvas';
 import { StatCard, Panel, AxisBar, LED, EventItem, Badge, LEVEL_COLOR } from '@/components/UI';
-import type { AlertLevel, SeismicEvent, SensorReading } from '@/types/seismo';
+import type { AlertLevel, PredictionRecord, SeismicEvent, SensorReading } from '@/types/seismo';
+
+const RC = (r: string) =>
+  r === 'high' ? '#ff4757' : r === 'moderate' ? '#ffa502' : '#2ed573';
 
 const WEEK_DATA = [
   { day: 'Mon', events: 2, maxMag: 2.1 },
@@ -32,11 +35,13 @@ export default function DashboardPage({
   waveHistory,
   alertLevel,
   events,
+  prediction,
 }: {
   readings: SensorReading;
   waveHistory: number[];
   alertLevel: AlertLevel;
   events: SeismicEvent[];
+  prediction: PredictionRecord;
 }) {
   const ledActive = { mild: [true,false,false], moderate: [true,true,false], strong: [true,true,true], none: [false,false,false] };
   const leds = ledActive[alertLevel] || [false,false,false];
@@ -44,6 +49,10 @@ export default function DashboardPage({
   const levelColor = LEVEL_COLOR[alertLevel] || 'var(--text3)';
 
   const recentEvents = events.slice(0, 6);
+  const maxMag = events.length
+    ? Math.max(...events.map((e) => e.magnitude))
+    : 0;
+  const riskColor = RC(prediction.risk || 'low');
 
   const hourlyData = useMemo(() =>
     Array.from({ length: 24 }, (_, i) => ({
@@ -56,10 +65,10 @@ export default function DashboardPage({
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        <StatCard label="Current Intensity" value={`${readings.magnitude.toFixed(3)}g`} sub="Peak acceleration" color="var(--teal)" />
-        <StatCard label="Events (7 days)"    value="14"  sub="+3 from last week"    color="var(--amber)" />
-        <StatCard label="Max Magnitude"      value="3.6" sub="Last 24 hours"        color="var(--red)" />
-        <StatCard label="Telegram Alerts"    value="6"   sub="Sent today"           color="var(--green)" />
+        <StatCard label="Current PGA" value={`${readings.pga.toFixed(4)}g`} sub={`Intensity ${readings.magnitude.toFixed(3)}g`} color="var(--teal)" />
+        <StatCard label="Recent events" value={events.length} sub="GET /api/events/recent" color="var(--amber)" />
+        <StatCard label="Max magnitude" value={maxMag ? `M${maxMag.toFixed(1)}` : '—'} sub="In recent list" color="var(--red)" />
+        <StatCard label="Risk (latest)" value={`${prediction.probability ?? 0}%`} sub={(prediction.risk || 'low').toUpperCase()} color={riskColor} />
       </div>
 
       {/* Main content grid */}
@@ -117,7 +126,25 @@ export default function DashboardPage({
 
           {/* Recent events list */}
           <Panel title="Recent Events" style={{ gap: 8 }}>
-            {recentEvents.slice(0, 4).map(e => <EventItem key={e.id} event={e} compact />)}
+            {recentEvents.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>No events yet</div>
+            ) : (
+              recentEvents.slice(0, 4).map(e => <EventItem key={e.id} event={e} compact />)
+            )}
+          </Panel>
+
+          <Panel title="Latest prediction">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, color: riskColor }}>
+                {prediction.probability ?? 0}%
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text2)' }}>
+                {prediction.region || '—'} · M{prediction.magnitude ?? 0}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                Confidence {prediction.confidence ?? 0}% · {prediction.risk || 'low'} risk
+              </div>
+            </div>
           </Panel>
         </div>
 

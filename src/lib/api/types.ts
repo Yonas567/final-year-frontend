@@ -64,6 +64,13 @@ export interface IngestBatchResponse {
   accepted: number;
 }
 
+export interface IngestExcelResponse {
+  ok: true;
+  accepted: number;
+  skipped: number;
+  errors?: string[];
+}
+
 export interface WsSensorMessage {
   type: "sensor";
   data: {
