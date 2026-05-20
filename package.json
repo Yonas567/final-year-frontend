@@ -16,6 +16,9 @@
     "react-dom": "19.1.0",
     "recharts": "^2.15.4"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["sharp", "unrs-resolver"]
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
