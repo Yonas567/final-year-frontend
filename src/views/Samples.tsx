@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Panel, StatCard, Badge, Btn } from "@/components/UI";
 import { useSamplesQuery } from "@/hooks/queries/samples";
+import { getApiOrigin } from "@/lib/api/config";
 import type { SensorSample } from "@/lib/api/types";
 
 function labelBadge(label: SensorSample["label"]) {
@@ -81,7 +82,7 @@ export default function SamplesPage() {
               fontFamily: "var(--font-mono)",
             }}
           >
-            GET /api/samples — newest first, 20 per page
+            GET /api/samples → {getApiOrigin()}/api/samples (20 per page, newest first)
           </p>
         </div>
         <Btn
@@ -201,7 +202,12 @@ export default function SamplesPage() {
               fontSize: 13,
             }}
           >
-            {error instanceof Error ? error.message : "Failed to load samples"}
+            <>
+              <div>{error instanceof Error ? error.message : "Failed to load samples"}</div>
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--text3)" }}>
+                Backend must expose GET /api/samples on {getApiOrigin()}. Redeploy the API if this route was added recently.
+              </div>
+            </>
           </div>
         ) : isLoading && !data ? (
           <div

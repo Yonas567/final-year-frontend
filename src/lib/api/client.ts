@@ -17,13 +17,28 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(apiUrl(path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
+  const url = apiUrl(path);
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+    });
+  } catch (err) {
+    const hint =
+      err instanceof TypeError && err.message === "Failed to fetch"
+        ? "Network or CORS error — ensure the API is deployed and reachable via the /api proxy"
+        : "Network error";
+    throw new ApiError(0, {
+      ok: false,
+      error: `${hint}: ${url}`,
+      code: "NETWORK_ERROR",
+    });
+  }
 
   const json = (await res.json().catch(() => ({}))) as T & ApiErrorBody;
 
@@ -32,8 +47,7 @@ export async function apiFetch<T>(
       ok: false,
       error:
         (json as ApiErrorBody).error ||
-        res.statusText ||
-        "Request failed",
+        `${res.status} ${res.statusText} (${url})`,
       code: (json as ApiErrorBody).code,
     });
   }
