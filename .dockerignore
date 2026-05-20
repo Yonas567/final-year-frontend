@@ -6,6 +6,7 @@ Dockerfile
 node_modules
 npm-debug.log*
 pnpm-debug.log*
+pnpm-workspace.yaml
 README.md
 .env*
 !.env.example
