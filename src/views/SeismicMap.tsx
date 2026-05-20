@@ -14,6 +14,8 @@ import {
   ETHIOPIA_SENSORS, HISTORICAL_QUAKES, ZONE_DANGER,
 } from '@/data/africaSeismic';
 import { Panel, StatCard, SectionLabel } from '@/components/UI';
+import { useRunPredictionMutation } from '@/hooks/queries/predict';
+import type { PredictionRecord } from '@/types/seismo';
 
 const ZONE_COLOR: Record<string, string> = { critical:'#ff0033', high:'#ff4757', moderate:'#ffa502', low:'#2ed573', offline:'#5a6e8a', mild:'#ffa502', strong:'#ff0033' };
 const ZONE_BG: Record<string, string> = { critical:'rgba(255,0,51,0.15)', high:'rgba(255,71,87,0.12)', moderate:'rgba(255,165,2,0.1)', low:'rgba(46,213,115,0.08)', offline:'rgba(90,110,138,0.08)', mild:'rgba(255,165,2,0.1)', strong:'rgba(255,0,51,0.12)' };
@@ -83,6 +85,22 @@ function genPred(s: (typeof ETHIOPIA_SENSORS)[number]): StationPrediction {
       energy:parseFloat((0.2+(prob/100)*1.5).toFixed(2)), freqPeak:parseFloat((2+(prob/100)*5).toFixed(1)) }};
 }
 
+function apiPredToStation(p: PredictionRecord): StationPrediction {
+  return {
+    probability: p.probability,
+    magnitude: p.magnitude,
+    confidence: p.confidence,
+    risk: p.risk,
+    window: '60s window',
+    features: p.features ?? {
+      stalta: 0,
+      pWave: 0,
+      energy: 0,
+      freqPeak: 0,
+    },
+  };
+}
+
 const ETH_OUTLINE=[[14.9,36.6],[14.5,37.1],[13.9,38.0],[13.5,38.5],[12.7,40.3],[11.8,41.8],[11.5,42.0],[11.0,42.5],[10.5,42.8],[9.5,44.0],[8.0,46.9],[6.5,45.5],[5.5,44.0],[4.2,41.9],[3.5,40.3],[3.8,39.5],[4.2,38.5],[4.7,37.5],[5.0,36.5],[5.5,35.5],[6.5,35.0],[7.0,34.7],[7.5,34.7],[8.5,35.5],[9.5,35.2],[10.5,35.0],[11.5,35.0],[12.5,35.0],[13.5,35.5],[14.0,36.0]];
 const HALOS=[{lat:11.5,lon:41.5,r:52,zone:'critical',label:'Afar Triangle'},{lat:8.5,lon:39.0,r:42,zone:'high',label:'Main Rift'},{lat:9.0,lon:40.3,r:35,zone:'high',label:'Awash Valley'}];
 
@@ -94,7 +112,8 @@ export default function SeismicMapPage() {
   const [preds,    setPreds]    = useState<Record<string, StationPrediction>>({});
   const [tab,      setTab]      = useState('live');
   const [filter,   setFilter]   = useState('all');
-  const [predLoad, setPredLoad] = useState(false);
+  const predictMutation = useRunPredictionMutation();
+  const predLoad = predictMutation.isPending;
 
   useEffect(()=>{
     const w: Record<string, number[]> = {};
@@ -134,7 +153,20 @@ export default function SeismicMapPage() {
   ] : [];
   const hourly=Array.from({length:24},(_,i)=>({ hour:`${String(i).padStart(2,'0')}h`, pga:parseFloat((Math.random()*(sel?sel.pga*4:0.1)+0.005).toFixed(4)) }));
 
-  function refreshPred(){ if(!sel)return; setPredLoad(true); setTimeout(()=>{ setPreds(p=>({...p,[sel.id]:genPred(sel)})); setPredLoad(false); },1600); }
+  function refreshPred() {
+    if (!sel) return;
+    predictMutation.mutate(
+      { deviceId: sel.id, windowSeconds: 60 },
+      {
+        onSuccess: (data) => {
+          setPreds((p) => ({ ...p, [sel.id]: apiPredToStation(data) }));
+        },
+        onError: () => {
+          setPreds((p) => ({ ...p, [sel.id]: genPred(sel) }));
+        },
+      },
+    );
+  }
 
   return (
     <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:18}}>

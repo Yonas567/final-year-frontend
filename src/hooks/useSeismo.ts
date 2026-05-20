@@ -1,4 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+"use client";
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getWebSocketUrl } from "@/lib/api/config";
+import type { WsAlertMessage, WsSensorMessage } from "@/lib/api/types";
+import { useRecentEventsQuery } from "@/hooks/queries/events";
+import {
+  usePredictionHistoryQuery,
+  useRunPredictionMutation,
+} from "@/hooks/queries/predict";
+import { queryKeys } from "@/hooks/queries/keys";
 import type {
   AlertLevel,
   DataSample,
@@ -8,24 +19,8 @@ import type {
   WsStatus,
 } from "@/types/seismo";
 
-/** Single env: backend base URL (e.g. http://localhost:5000). WebSocket uses same host at /ws. */
-const API_BASE = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-).replace(/\/$/, "");
+const RECENT_EVENTS_N = 20;
 
-function webSocketUrl(apiBase: string): string {
-  try {
-    const url = new URL(apiBase);
-    const wsProto = url.protocol === "https:" ? "wss:" : "ws:";
-    return `${wsProto}//${url.host}/ws`;
-  } catch {
-    return "ws://localhost:5000/ws";
-  }
-}
-
-const WS_URL = webSocketUrl(API_BASE);
-
-/** Quiet baseline trace so the waveform panel is never a flat empty line before live data arrives. */
 function idleWaveSamples(length = 200): number[] {
   return Array.from({ length }, (_, i) => {
     const t = i * 0.08;
@@ -37,61 +32,24 @@ function idleWaveSamples(length = 200): number[] {
   });
 }
 
-/** Shown in Recent Events until the API returns real rows (then replaced). */
-const FALLBACK_EVENTS: SeismicEvent[] = [
-  {
-    id: 1,
-    time: "2025-01-15T04:12:33Z",
-    magnitude: 2.1,
-    level: "mild",
-    location: "Awash Valley",
-    depth: "8.2",
-    lat: "8.921",
-    lon: "40.102",
-  },
-  {
-    id: 2,
-    time: "2025-01-15T01:55:08Z",
-    magnitude: 3.6,
-    level: "moderate",
-    location: "Lake Turkana Rift",
-    depth: "12.5",
-    lat: "9.115",
-    lon: "40.533",
-  },
-  {
-    id: 3,
-    time: "2025-01-14T22:41:00Z",
-    magnitude: 1.8,
-    level: "mild",
-    location: "Addis Ababa Basin",
-    depth: "5.1",
-    lat: "9.022",
-    lon: "38.747",
-  },
-  {
-    id: 4,
-    time: "2025-01-14T18:22:15Z",
-    magnitude: 2.9,
-    level: "mild",
-    location: "Blue Nile Gorge",
-    depth: "9.8",
-    lat: "10.21",
-    lon: "38.742",
-  },
-  {
-    id: 5,
-    time: "2025-01-14T14:07:44Z",
-    magnitude: 4.1,
-    level: "moderate",
-    location: "Central Rift Valley",
-    depth: "15.3",
-    lat: "8.450",
-    lon: "39.510",
-  },
-];
+function alertToEvent(data: WsAlertMessage["data"]): SeismicEvent {
+  return {
+    id: data.id,
+    time: data.time,
+    magnitude: data.magnitude,
+    level: data.level,
+    location: data.location,
+    depth: data.depth,
+    lat: data.lat,
+    lon: data.lon,
+  };
+}
 
 export function useSensorData() {
+  const queryClient = useQueryClient();
+  const { data: apiEvents = [], isLoading: eventsLoading } =
+    useRecentEventsQuery(RECENT_EVENTS_N);
+
   const [readings, setReadings] = useState<SensorReading>({
     x: 0.02,
     y: 0.01,
@@ -104,38 +62,53 @@ export function useSensorData() {
     idleWaveSamples(200),
   );
   const [alertLevel, setAlertLevel] = useState<AlertLevel>("none");
-  const [events, setEvents] = useState<SeismicEvent[]>(FALLBACK_EVENTS);
+  const [liveEvents, setLiveEvents] = useState<SeismicEvent[]>([]);
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
 
   const wsRef = useRef<WebSocket | null>(null);
 
+  const events = useMemo(() => {
+    const seen = new Set<string | number>();
+    const merged: SeismicEvent[] = [];
+    for (const e of [...liveEvents, ...apiEvents]) {
+      const key = String(e.id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(e);
+    }
+    return merged.slice(0, 50);
+  }, [liveEvents, apiEvents]);
+
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const wsUrl = getWebSocketUrl();
+
     const connect = () => {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      setWsStatus("connecting");
+
       ws.onopen = () => setWsStatus("open");
       ws.onclose = () => {
         setWsStatus("closed");
         reconnectTimer = setTimeout(connect, 3000);
       };
       ws.onerror = () => ws.close();
+
       ws.onmessage = (e) => {
         try {
-          const { type, data } = JSON.parse(e.data as string) as {
-            type: string;
-            data: Record<string, unknown>;
-          };
-          if (type === "sensor") {
-            const pga =
-              (data.pga as number | undefined) ??
-              (data.magnitude as number | undefined) ??
-              0;
+          const msg = JSON.parse(e.data as string) as
+            | WsSensorMessage
+            | WsAlertMessage;
+
+          if (msg.type === "sensor") {
+            const { data } = msg;
+            const pga = data.pga ?? data.magnitude ?? 0;
             setReadings({
-              x: data.x as number,
-              y: data.y as number,
-              z: data.z as number,
-              magnitude: data.magnitude as number,
+              x: data.x,
+              y: data.y,
+              z: data.z,
+              magnitude: data.magnitude,
               pga,
               timestamp: Date.now(),
             });
@@ -144,44 +117,43 @@ export function useSensorData() {
               n.shift();
               return n;
             });
-            setAlertLevel((data.level as AlertLevel) || "none");
+            setAlertLevel(data.level || "none");
           }
-          if (type === "alert") {
-            setEvents((prev) =>
-              [
-                {
-                  ...(data as unknown as SeismicEvent),
-                  id: (data as { _id?: string })._id || Date.now(),
-                },
-                ...prev,
-              ].slice(0, 50),
+
+          if (msg.type === "alert") {
+            const event = alertToEvent(msg.data);
+            setLiveEvents((prev) => [event, ...prev].slice(0, 50));
+            queryClient.setQueryData(
+              queryKeys.events.recent(RECENT_EVENTS_N),
+              (old: SeismicEvent[] | undefined) => {
+                const prev = old ?? [];
+                if (prev.some((x) => String(x.id) === String(event.id)))
+                  return prev;
+                return [event, ...prev].slice(0, RECENT_EVENTS_N);
+              },
             );
           }
         } catch {
-          /* ignore */
+          /* ignore malformed frames */
         }
       };
     };
+
     connect();
-    fetch(`${API_BASE}/api/events/recent?n=20`)
-      .then((r) => r.json())
-      .then((body: { data?: SeismicEvent[] }) => {
-        if (body.data?.length)
-          setEvents(
-            body.data.map((e) => ({
-              ...e,
-              id: (e as { _id?: string })._id || e.id,
-            })),
-          );
-      })
-      .catch(() => {});
     return () => {
       wsRef.current?.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, []);
+  }, [queryClient]);
 
-  return { readings, waveHistory, alertLevel, events, wsStatus };
+  return {
+    readings,
+    waveHistory,
+    alertLevel,
+    events,
+    wsStatus,
+    eventsLoading,
+  };
 }
 
 export function useClock() {
@@ -204,77 +176,31 @@ const EMPTY_PREDICTION: PredictionRecord = {
 };
 
 export function usePrediction() {
-  const [prediction, setPrediction] =
-    useState<PredictionRecord>(EMPTY_PREDICTION);
-  const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<PredictionRecord[]>([]);
+  const historyQuery = usePredictionHistoryQuery();
+  const predictMutation = useRunPredictionMutation();
 
-  const runPrediction = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/predict`, { method: "POST" });
-      const json = (await res.json()) as {
-        ok?: boolean;
-        data?: PredictionRecord & { _id?: string };
-      };
-      if (json.ok && json.data) {
-        const newPred: PredictionRecord = {
-          ...json.data,
-          id: json.data._id || Date.now(),
-        };
-        setPrediction(newPred);
-        setHistory((prev) => [newPred, ...prev].slice(0, 20));
-      }
-    } catch (err) {
-      console.error("Prediction error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const history = historyQuery.data ?? [];
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/predict/history?limit=10`)
-      .then((r) => r.json())
-      .then((body: { data?: PredictionRecord[] }) => {
-        if (body.data?.length) setHistory(body.data);
-      })
-      .catch(() => {});
-  }, []);
+  const prediction =
+    predictMutation.data ??
+    history[0] ??
+    EMPTY_PREDICTION;
 
-  return { prediction, loading, runPrediction, history };
+  const runPrediction = useCallback(
+    async (opts?: { deviceId?: string; windowSeconds?: number }) => {
+      await predictMutation.mutateAsync(opts ?? {});
+    },
+    [predictMutation],
+  );
+
+  return {
+    prediction,
+    loading: predictMutation.isPending || historyQuery.isLoading,
+    runPrediction,
+    history,
+    historyLoading: historyQuery.isLoading,
+  };
 }
 
-export function useDataCollection() {
-  const [collected, setCollected] = useState(HISTORICAL_DATA);
-  const [recording, setRecording] = useState(false);
-  const startRecording = useCallback(() => setRecording(true), []);
-  const stopRecording = useCallback(() => setRecording(false), []);
-  const addSample = useCallback((sample: DataSample) => {
-    setCollected((prev) => [...prev, sample].slice(-500));
-  }, []);
-  return { collected, recording, startRecording, stopRecording, addSample };
-}
-
-export async function sendTelegramTest() {
-  const res = await fetch(`${API_BASE}/api/alerts/test`, { method: "POST" });
-  return res.json();
-}
-
-export async function updateAlertConfig(config: unknown) {
-  const res = await fetch(`${API_BASE}/api/alerts/config`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  return res.json();
-}
-
-export const HISTORICAL_DATA: DataSample[] = Array.from({ length: 120 }, (_, i) => ({
-  id: i + 1,
-  timestamp: new Date(Date.now() - (120 - i) * 30000).toISOString(),
-  x: parseFloat((Math.random() * 0.15).toFixed(4)),
-  y: parseFloat((Math.random() * 0.12).toFixed(4)),
-  z: parseFloat((0.95 + Math.random() * 0.1).toFixed(4)),
-  magnitude: parseFloat((Math.random() * 0.1).toFixed(4)),
-  label: Math.random() < 0.08 ? 1 : 0,
-}));
+/** Local-only samples for charts before ingest; not mock API data. */
+export const HISTORICAL_DATA: DataSample[] = [];

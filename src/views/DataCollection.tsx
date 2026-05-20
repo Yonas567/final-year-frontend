@@ -1,14 +1,43 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ScatterChart, Scatter, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Play, Square, Download, Trash2 } from 'lucide-react';
 import { Panel, Btn, Badge, StatCard } from '@/components/UI';
-import { HISTORICAL_DATA } from '@/hooks/useSeismo';
+import { DEFAULT_DEVICE_ID } from '@/lib/api/config';
+import { useIngestBatchMutation, useIngestMutation } from '@/hooks/queries/ingest';
 import type { SensorReading, DataSample } from '@/types/seismo';
+
+function labelForSample(
+  magnitude: number,
+  labelMode: string,
+): number {
+  if (labelMode === 'quake') return 1;
+  if (labelMode === 'noise') return 0;
+  return magnitude > 0.15 ? 1 : 0;
+}
+
+function sampleFromReading(
+  readings: SensorReading,
+  labelMode: string,
+): DataSample {
+  const t = Date.now();
+  const magnitude = Math.sqrt(
+    readings.x ** 2 + readings.y ** 2 + readings.z ** 2,
+  );
+  return {
+    id: t,
+    timestamp: new Date(t).toISOString(),
+    x: readings.x,
+    y: readings.y,
+    z: readings.z,
+    magnitude,
+    label: labelForSample(magnitude, labelMode),
+  };
+}
 
 export default function DataPage({
   readings,
@@ -18,28 +47,63 @@ export default function DataPage({
   waveHistory: number[];
 }) {
   const [recording, setRecording] = useState(false);
-  const [samples, setSamples] = useState(HISTORICAL_DATA.slice(0, 80));
+  const [samples, setSamples] = useState<DataSample[]>([]);
   const [labelMode, setLabelMode] = useState('auto');
   const [filter, setFilter] = useState('all');
-  const bufRef = useRef<DataSample[]>([]);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+  const batchBufRef = useRef<{ t: number; x: number; y: number; z: number }[]>([]);
+  const ingestBatch = useIngestBatchMutation();
+  const ingestOne = useIngestMutation();
+
+  const flushBatch = useCallback(
+    (payload: { t: number; x: number; y: number; z: number }[]) => {
+      if (!payload.length) return;
+      const rows = payload.map((s) => {
+        const magnitude = Math.sqrt(s.x ** 2 + s.y ** 2 + s.z ** 2);
+        return {
+          id: s.t,
+          timestamp: new Date(s.t).toISOString(),
+          x: s.x,
+          y: s.y,
+          z: s.z,
+          magnitude,
+          label: labelForSample(magnitude, labelMode),
+        };
+      });
+      setSamples((prev) => [...prev, ...rows].slice(-500));
+      setIngestError(null);
+      ingestBatch.mutate(
+        { deviceId: DEFAULT_DEVICE_ID, samples: payload },
+        {
+          onError: (err) =>
+            setIngestError(
+              err instanceof Error ? err.message : 'Batch ingest failed',
+            ),
+        },
+      );
+    },
+    [ingestBatch, labelMode],
+  );
 
   useEffect(() => {
     if (!recording) return;
-    const sample = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
+    batchBufRef.current.push({
+      t: Date.now(),
       x: readings.x,
       y: readings.y,
       z: readings.z,
-      magnitude: readings.magnitude,
-      label: labelMode === 'auto' ? (readings.magnitude > 0.15 ? 1 : 0) : (labelMode === 'quake' ? 1 : 0),
-    };
-    bufRef.current.push(sample);
-    if (bufRef.current.length >= 5) {
-      setSamples(prev => [...prev, ...bufRef.current].slice(-500));
-      bufRef.current = [];
+    });
+    if (batchBufRef.current.length >= 5) {
+      flushBatch(batchBufRef.current.splice(0));
     }
-  }, [readings, recording, labelMode]);
+  }, [readings, recording, flushBatch]);
+
+  const toggleRecording = () => {
+    if (recording && batchBufRef.current.length > 0) {
+      flushBatch(batchBufRef.current.splice(0));
+    }
+    setRecording((r) => !r);
+  };
 
   const quakeCount  = samples.filter(s => s.label === 1).length;
   const noiseCount  = samples.filter(s => s.label === 0).length;
@@ -66,7 +130,7 @@ export default function DataPage({
         <StatCard label="Total Samples"   value={samples.length}  sub="Collected"          color="var(--teal)"  />
         <StatCard label="Seismic Events"  value={quakeCount}       sub="Labeled as quake"   color="var(--red)"   />
         <StatCard label="Background Noise" value={noiseCount}      sub="Labeled as noise"   color="var(--text2)" />
-        <StatCard label="Dataset Balance" value={`${quakeCount ? Math.round(quakeCount/samples.length*100) : 0}%`} sub="Quake ratio" color="var(--amber)" />
+        <StatCard label="Dataset Balance" value={`${samples.length ? Math.round(quakeCount/samples.length*100) : 0}%`} sub="Quake ratio" color="var(--amber)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'start' }}>
@@ -76,7 +140,7 @@ export default function DataPage({
 
           <Panel title="Recording Controls">
             <div style={{ display: 'flex', gap: 10 }}>
-              <Btn variant={recording ? 'danger' : 'primary'} onClick={() => setRecording(r => !r)}
+              <Btn variant={recording ? 'danger' : 'primary'} onClick={toggleRecording}
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 {recording ? <><Square size={12} /> Stop</> : <><Play size={12} /> Start Recording</>}
               </Btn>
@@ -84,8 +148,16 @@ export default function DataPage({
             {recording && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(255,71,87,0.08)', border: '1px solid rgba(255,71,87,0.3)', borderRadius: 'var(--radius-sm)' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--red)', boxShadow: '0 0 6px var(--red)', animation: 'pulseDot 1s infinite' }} />
-                <span style={{ fontSize: 12, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>Recording live data...</span>
+                <span style={{ fontSize: 12, color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+                  Recording live data… posting batches to /api/ingest/batch
+                </span>
               </div>
+            )}
+            {ingestBatch.isPending && (
+              <div style={{ fontSize: 11, color: 'var(--teal)', fontFamily: 'var(--font-mono)' }}>Uploading batch…</div>
+            )}
+            {ingestError && (
+              <div style={{ fontSize: 11, color: 'var(--red)' }}>{ingestError}</div>
             )}
           </Panel>
 
@@ -110,6 +182,35 @@ export default function DataPage({
 
           <Panel title="Data Actions">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Btn
+                variant="primary"
+                disabled={ingestOne.isPending}
+                onClick={() => {
+                  setIngestError(null);
+                  ingestOne.mutate(
+                    {
+                      deviceId: DEFAULT_DEVICE_ID,
+                      x: readings.x,
+                      y: readings.y,
+                      z: readings.z,
+                      timestamp: new Date().toISOString(),
+                    },
+                    {
+                      onSuccess: () =>
+                        setSamples((prev) =>
+                          [...prev, sampleFromReading(readings, labelMode)].slice(-500),
+                        ),
+                      onError: (err) =>
+                        setIngestError(
+                          err instanceof Error ? err.message : 'Ingest failed',
+                        ),
+                    },
+                  );
+                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              >
+                {ingestOne.isPending ? 'Sending…' : 'POST /api/ingest (current)'}
+              </Btn>
               <Btn variant="outline" onClick={exportCSV}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <Download size={12} /> Export CSV
@@ -121,8 +222,9 @@ export default function DataPage({
             </div>
             <div style={{ padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 11, color: 'var(--text3)', lineHeight: 1.7 }}>
               <strong style={{ color: 'var(--text2)' }}>ESP32 Integration:</strong><br/>
-              POST sensor data to <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)', background: 'var(--surface3)', padding: '1px 5px', borderRadius: 3 }}>/api/ingest</code><br/>
-              Fields: x, y, z, timestamp
+              Single sample: <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)', background: 'var(--surface3)', padding: '1px 5px', borderRadius: 3 }}>POST /api/ingest</code><br/>
+              Live recording: <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)', background: 'var(--surface3)', padding: '1px 5px', borderRadius: 3 }}>POST /api/ingest/batch</code><br/>
+              Device: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)' }}>{DEFAULT_DEVICE_ID}</span>
             </div>
           </Panel>
 

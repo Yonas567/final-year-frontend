@@ -6,7 +6,7 @@ import {
   Tooltip, ResponsiveContainer, Cell, ReferenceLine,
 } from 'recharts';
 import {
-  Brain, FlaskConical, Clock, Shield, Target,
+  Brain, FlaskConical, Shield, Target,
   AlertTriangle, CheckCircle, RefreshCw, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { Panel, StatCard } from '@/components/UI';
@@ -238,9 +238,9 @@ function FormulaCard({ id, result }: { id: FormulaKey; result: FormulaResult }) 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PredictionPage({
   prediction,
-  loading: _loading,
-  runPrediction: _runPrediction,
-  history: _history,
+  loading,
+  runPrediction,
+  history,
 }: {
   prediction: PredictionRecord;
   loading: boolean;
@@ -309,7 +309,6 @@ export default function PredictionPage({
             color: mode===id ? 'var(--text)' : 'var(--text3)', transition:'all 0.15s',
           }}>
             <Icon size={13} strokeWidth={mode===id ? 2.5 : 2} />{label}
-            {id==='ai' && <span style={{ fontSize:8, background:'var(--amber)', color:'#000', fontWeight:800, padding:'1px 5px', borderRadius:3 }}>SOON</span>}
           </button>
         ))}
       </div>
@@ -518,38 +517,61 @@ export default function PredictionPage({
       {/* ══ AI MODEL MODE ════════════════════════════════════════════════════ */}
       {mode === 'ai' && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:14, padding:'52px 32px', textAlign:'center' }}>
-            <Brain size={42} color="var(--teal)" style={{ margin:'0 auto 16px' }}/>
-            <div style={{ fontSize:20, fontWeight:800, color:'var(--text)', marginBottom:8 }}>AI Model Prediction</div>
-            <div style={{ fontSize:13, color:'var(--text3)', lineHeight:1.8, maxWidth:500, margin:'0 auto 24px' }}>
-              A trained LSTM + TFLite model will process continuous ADXL335 sensor streams on the backend and predict time-to-failure in real time. This mode is being developed in the next project phase.
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>AI Model Prediction</div>
+              <div style={{ fontSize:11, color:'var(--text3)', marginTop:4 }}>POST /api/predict · GET /api/predict/history</div>
             </div>
-            <div style={{ display:'inline-flex', gap:8, alignItems:'center', background:'rgba(255,165,2,0.1)', border:'1px solid rgba(255,165,2,0.3)', borderRadius:8, padding:'10px 20px' }}>
-              <Clock size={13} color="var(--amber)"/>
-              <span style={{ fontSize:12, color:'var(--amber)', fontWeight:700 }}>Coming in next project phase</span>
-            </div>
-            <div style={{ marginTop:28, display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, maxWidth:520, margin:'28px auto 0' }}>
-              {[
-                ['Algorithm','LSTM + TFLite'],['Input','500 samples/run'],
-                ['Features','RMS, Var, Kurt, ZCR'],['Trained on','USGS + local data'],
-                ['Output','T_fail probability'],['Status','🔒 Not deployed yet'],
-              ].map(([l,v]) => (
-                <div key={l} style={{ background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 12px' }}>
-                  <div style={{ fontSize:9, color:'var(--text3)', textTransform:'uppercase', marginBottom:4 }}>{l}</div>
-                  <div style={{ fontSize:11, fontWeight:700, color:'var(--text2)', fontFamily:'var(--font-mono)' }}>{v}</div>
-                </div>
-              ))}
-            </div>
+            <button
+              onClick={() => void runPrediction()}
+              disabled={loading}
+              style={{
+                display:'flex', alignItems:'center', gap:6, background:'var(--teal)',
+                border:'none', borderRadius:7, padding:'8px 16px', cursor: loading ? 'not-allowed' : 'pointer',
+                color:'#000', fontSize:12, fontWeight:700, opacity: loading ? 0.7 : 1,
+              }}
+            >
+              <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}/>
+              {loading ? 'Running model…' : 'Run Prediction'}
+            </button>
           </div>
 
-          {/* Placeholder showing current simulated AI output */}
-          <Panel title="Current Output — Simulated Placeholder (until AI model is deployed)">
+          <Panel title="Latest prediction — POST /api/predict">
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-              <StatCard label="Probability" value={`${prediction?.probability || 0}%`} sub="Next 24h"    color={RC(prediction?.risk || 'low')} />
-              <StatCard label="Magnitude"   value={`M${prediction?.magnitude || 0}`}   sub="Estimated"  color="var(--teal)" />
-              <StatCard label="Confidence"  value={`${prediction?.confidence || 0}%`}  sub="Model"      color="var(--green)" />
-              <StatCard label="Risk"        value={(prediction?.risk || 'low').toUpperCase()} sub="Assessment" color={RC(prediction?.risk || 'low')} />
+              <StatCard label="Probability" value={`${prediction?.probability ?? 0}%`} sub={prediction?.region || '—'} color={RC(prediction?.risk || 'low')} />
+              <StatCard label="Magnitude"   value={`M${prediction?.magnitude ?? 0}`}   sub="Estimated"  color="var(--teal)" />
+              <StatCard label="Confidence"  value={`${prediction?.confidence ?? 0}%`}  sub="Model"      color="var(--green)" />
+              <StatCard label="Risk"        value={(prediction?.risk || 'low').toUpperCase()} sub={prediction?.coords || 'Assessment'} color={RC(prediction?.risk || 'low')} />
             </div>
+            {prediction?.features && (
+              <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, fontFamily:'var(--font-mono)', fontSize:10, color:'var(--text3)' }}>
+                <span>STA/LTA: {prediction.features.stalta}</span>
+                <span>P-Wave: {prediction.features.pWave}</span>
+                <span>Energy: {prediction.features.energy}</span>
+                <span>Freq peak: {prediction.features.freqPeak} Hz</span>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title={`Prediction history — GET /api/predict/history (${history.length})`}>
+            {history.length === 0 ? (
+              <div style={{ padding:24, textAlign:'center', color:'var(--text3)', fontSize:13 }}>No history yet. Run a prediction to populate.</div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:320, overflowY:'auto' }}>
+                {history.map((h) => (
+                  <div key={String(h.id)} style={{ display:'grid', gridTemplateColumns:'1fr repeat(4, auto)', gap:12, alignItems:'center', padding:'10px 12px', background:'var(--surface2)', borderRadius:8, border:'1px solid var(--border)' }}>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{h.region}</div>
+                      <div style={{ fontSize:10, color:'var(--text3)', fontFamily:'var(--font-mono)' }}>{new Date(h.timestamp).toLocaleString()}</div>
+                    </div>
+                    <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:RC(h.risk) }}>{h.probability}%</span>
+                    <span style={{ fontFamily:'var(--font-mono)', fontSize:12 }}>M{h.magnitude}</span>
+                    <span style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--green)' }}>{h.confidence}%</span>
+                    <span style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', color:RC(h.risk) }}>{h.risk}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </Panel>
         </div>
       )}
