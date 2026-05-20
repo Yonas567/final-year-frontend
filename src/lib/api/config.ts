@@ -1,23 +1,16 @@
+import { resolveApiOrigin } from "./origins";
+
 /** Backend origin without trailing slash or `/api` suffix. */
 export function getApiOrigin(): string {
-  const raw = (
-    process.env.API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:6010"
-  ).replace(/\/$/, "");
-  return raw.endsWith("/api") ? raw.slice(0, -4) : raw;
+  return resolveApiOrigin();
 }
 
-/**
- * API path via same-origin `/api/*` (proxied in next.config rewrites).
- * Avoids CORS failures when the backend returns errors without ACAO headers.
- */
+/** Same-origin path; proxied by src/app/api/[...path]/route.ts */
 export function apiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `/api${p}`;
 }
 
-/** Absolute backend URL (WebSocket, debugging). */
 export function absoluteApiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${getApiOrigin()}/api${p}`;

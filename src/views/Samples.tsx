@@ -205,7 +205,7 @@ export default function SamplesPage() {
             <>
               <div>{error instanceof Error ? error.message : "Failed to load samples"}</div>
               <div style={{ marginTop: 8, fontSize: 11, color: "var(--text3)" }}>
-                In production set <code style={{ fontFamily: "var(--font-mono)", color: "var(--teal)" }}>API_URL=https://apiearthquake.yonasproject.cloud</code> on the frontend container (not localhost). Restart after saving. Displayed target: {getApiOrigin()}
+                Backend target: {getApiOrigin()}. If this shows localhost in production, redeploy the latest frontend image.
               </div>
             </>
           </div>

@@ -1,32 +1,23 @@
-/**
- * Server-only API origin (Docker / Node). Set API_URL in production — not localhost.
- */
-export function getBackendOrigin(): string {
-  const raw = (
-    process.env.API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:6010"
-  )
-    .replace(/\/$/, "")
-    .replace(/\/api$/, "");
+import { PRODUCTION_API_ORIGIN, resolveApiOrigin } from "./origins";
 
-  return raw;
+export function getBackendOrigin(): string {
+  return resolveApiOrigin();
 }
 
 export function isProductionMisconfigured(): boolean {
   if (process.env.NODE_ENV !== "production") return false;
-  const o = getBackendOrigin();
-  return o.includes("localhost") || o.includes("127.0.0.1");
+  const explicit = (process.env.API_URL || "").trim();
+  if (!explicit) return false;
+  return /localhost|127\.0\.0\.1/i.test(explicit);
 }
 
 export function upstreamConfigHint(): string {
   const origin = getBackendOrigin();
   if (isProductionMisconfigured()) {
     return (
-      `API_URL is "${origin}" but this container cannot reach localhost. ` +
-      `In your deploy panel set API_URL=https://apiearthquake.yonasproject.cloud ` +
-      `(or your real backend URL), then restart the frontend container.`
+      `API_URL was set to localhost in production; using ${PRODUCTION_API_ORIGIN} instead. ` +
+      `Remove API_URL=http://localhost:6010 from deploy env or set API_URL=${PRODUCTION_API_ORIGIN}.`
     );
   }
-  return `Set API_URL to your backend base URL (current: ${origin}).`;
+  return `Backend: ${origin}`;
 }
